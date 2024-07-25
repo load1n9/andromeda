@@ -2,6 +2,7 @@ use std::{
     any::Any,
     cell::RefCell,
     collections::VecDeque,
+    path::PathBuf,
     sync::{atomic::Ordering, mpsc::Receiver},
 };
 
@@ -11,10 +12,14 @@ use nova_vm::ecmascript::{
         agent::{HostHooks, Job, Options},
         initialize_host_defined_realm, Agent, JsResult, Realm,
     },
-    scripts_and_modules::script::{parse_script, script_evaluation},
+    scripts_and_modules::{
+        script::{parse_script, script_evaluation},
+        ScriptOrModule,
+    },
     types::{Object, Value},
 };
 use oxc_allocator::Allocator;
+use oxc_ast::ast;
 
 use crate::{
     exit_with_parse_errors, initialize_recommended_builtins, initialize_recommended_extensions,
@@ -22,6 +27,7 @@ use crate::{
 };
 
 pub struct RuntimeHostHooks {
+    allocator: Allocator,
     promise_job_queue: RefCell<VecDeque<Job>>,
     host_data: HostData,
 }
@@ -33,10 +39,11 @@ impl std::fmt::Debug for RuntimeHostHooks {
 }
 
 impl RuntimeHostHooks {
-    pub fn new(host_data: HostData) -> Self {
+    pub fn new(host_data: HostData, allocator: Allocator) -> Self {
         Self {
             promise_job_queue: RefCell::default(),
             host_data,
+            allocator,
         }
     }
 
@@ -57,6 +64,43 @@ impl HostHooks for RuntimeHostHooks {
     fn get_host_data(&self) -> &dyn Any {
         &self.host_data
     }
+
+    // TODO: Implement a transport abstraction.
+    fn import_module(&self, import: &ast::ImportDeclaration<'_>, agent: &mut Agent) {
+        let realm_id = agent.current_realm_id();
+
+        let script_or_module = agent.running_execution_context().script_or_module.unwrap();
+        let script_id = match script_or_module {
+            ScriptOrModule::Script(script_id) => script_id,
+            _ => todo!(),
+        };
+        let script = &agent[script_id];
+
+        let current_host_path = script.host_defined.as_ref().unwrap();
+        let mut current_host_path = current_host_path
+            .downcast_ref::<PathBuf>()
+            .unwrap()
+            .to_path_buf();
+        current_host_path.pop(); // Use the parent folder
+        let current_host_path = std::fs::canonicalize(&current_host_path).unwrap();
+
+        let import_path = import.source.value.as_str();
+        let host_path = current_host_path.join(import_path);
+        let host_path = std::fs::canonicalize(host_path).unwrap();
+
+        let file = std::fs::read_to_string(&host_path).unwrap();
+        let script = match parse_script(
+            &self.allocator,
+            file.into(),
+            realm_id,
+            false,
+            Some(Box::leak(Box::new(host_path))),
+        ) {
+            Ok(script) => script,
+            Err((file, errors)) => exit_with_parse_errors(errors, import_path, &file),
+        };
+        script_evaluation(agent, script).unwrap();
+    }
 }
 
 pub struct RuntimeConfig {
@@ -68,7 +112,6 @@ pub struct RuntimeConfig {
 pub struct Runtime {
     pub config: RuntimeConfig,
     pub agent: Agent,
-    pub allocator: Allocator,
     pub host_hooks: &'static RuntimeHostHooks,
     pub macro_task_rx: Receiver<MacroTask>,
 }
@@ -76,8 +119,9 @@ pub struct Runtime {
 impl Runtime {
     /// Create a new [Runtime] given a [RuntimeConfig]. Use [Runtime::run] to run it.
     pub fn new(config: RuntimeConfig) -> Self {
+        let allocator = Allocator::default();
         let (host_data, macro_task_rx) = HostData::new();
-        let host_hooks = RuntimeHostHooks::new(host_data);
+        let host_hooks = RuntimeHostHooks::new(host_data, allocator);
 
         let host_hooks: &RuntimeHostHooks = &*Box::leak(Box::new(host_hooks));
         let mut agent = Agent::new(
@@ -97,11 +141,9 @@ impl Runtime {
                 Some(initialize_recommended_extensions),
             );
         }
-        let allocator = Allocator::default();
 
         Self {
             config,
-            allocator,
             agent,
             host_hooks,
             macro_task_rx,
@@ -113,34 +155,37 @@ impl Runtime {
         let realm = self.agent.current_realm_id();
 
         // LOad the builtins js sources
-        initialize_recommended_builtins(&self.allocator, &mut self.agent, self.config.no_strict);
+        initialize_recommended_builtins(
+            &self.host_hooks.allocator,
+            &mut self.agent,
+            self.config.no_strict,
+        );
 
         let mut final_result = Value::Null;
 
         // Fetch the runtime mod.ts file using a macro and add it to the paths
         for path in &self.config.paths {
             let file = std::fs::read_to_string(path).unwrap();
+            let host_path = PathBuf::from(path);
             let script = match parse_script(
-                &self.allocator,
+                &self.host_hooks.allocator,
                 file.into(),
                 realm,
                 !self.config.no_strict,
-                None,
+                Some(Box::leak(Box::new(host_path))),
             ) {
                 Ok(script) => script,
                 Err((file, errors)) => exit_with_parse_errors(errors, path, &file),
             };
             final_result = match script_evaluation(&mut self.agent, script) {
                 Ok(v) => v,
-                err @ _ => return err,
+                err => return err,
             }
         }
 
         loop {
             while let Some(job) = self.host_hooks.pop_promise_job() {
-                if let Err(err) = job.run(&mut self.agent) {
-                    return Err(err);
-                }
+                job.run(&mut self.agent)?;
             }
 
             // If both the microtasks and macrotasks queues are empty we can end the event loop

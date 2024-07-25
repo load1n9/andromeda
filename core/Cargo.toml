@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 nova_vm = { workspace = true }
 oxc_allocator = { workspace = true }
+oxc_ast = { workspace = true }
 anymap = { workspace = true }
 tokio = { workspace = true }
 miette = { workspace = true }
