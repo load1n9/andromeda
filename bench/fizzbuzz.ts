@@ -1,4 +1,7 @@
 // FizzBuzz example
+// deno run bench/fizzbuzz.ts
+// node bench/fizzbuzz.ts
+// andromeda run bench/fizzbuzz.ts
 
 for (let i = 1; i <= 100; i++) {
     let output = "";
@@ -8,8 +11,5 @@ for (let i = 1; i <= 100; i++) {
     if (i % 5 === 0) {
         output += "Buzz";
     }
-    if (output === "") {
-        output = i.toString();
-    }
-    console.log(output);
+    console.log(output || i);
 }
