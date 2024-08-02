@@ -62,6 +62,7 @@ impl HostHooks for RuntimeHostHooks {
 pub struct RuntimeConfig {
     pub no_strict: bool,
     pub paths: Vec<String>,
+    pub db_path: String,
     pub verbose: bool,
 }
 
@@ -112,7 +113,7 @@ impl Runtime {
     pub fn run(&mut self) -> JsResult<Value> {
         let realm = self.agent.current_realm_id();
 
-        // LOad the builtins js sources
+        // Load the builtins js sources
         initialize_recommended_builtins(&self.allocator, &mut self.agent, self.config.no_strict);
 
         let mut final_result = Value::Null;

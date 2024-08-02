@@ -6,12 +6,16 @@ use nova_vm::ecmascript::{
 use oxc_allocator::Allocator;
 use oxc_diagnostics::OxcDiagnostic;
 
+#[cfg(feature = "unsafe-sqlite")]
+use crate::ext::SQliteExt;
 use crate::{ext_loader::AgentExtLoader, ConsoleExt, FsExt, TimeExt};
 
 pub fn initialize_recommended_extensions(agent: &mut Agent, global_object: Object) {
     agent.load_ext(global_object, FsExt);
     agent.load_ext(global_object, ConsoleExt);
     agent.load_ext(global_object, TimeExt);
+    #[cfg(feature = "unsafe-sqlite")]
+    agent.load_ext(global_object, SQliteExt);
 }
 
 pub fn initialize_recommended_builtins(allocator: &Allocator, agent: &mut Agent, no_strict: bool) {
