@@ -6,9 +6,6 @@ default-run = "andromeda"
 license = "MIT"
 readme = "../README.md"
 
-[features]
-default = []
-
 [dependencies]
 clap = { workspace = true }
 cliclack = { workspace = true }
