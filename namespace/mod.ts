@@ -165,6 +165,12 @@ const Andromeda = {
   },
 };
 
+const Performance = {
+  now() {
+    throw new Error(" Performance.now() not implemented")
+  }
+};
+
 /**
  * The prompt function prompts the user for input.
  * 
@@ -175,6 +181,6 @@ const Andromeda = {
  * ```
  */
 function prompt(message: string): string {
-  internal_print(message+ ": ");
+  internal_print(message + ": ");
   return Andromeda.stdin.readLine();
 }
