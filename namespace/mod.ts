@@ -165,12 +165,6 @@ const Andromeda = {
   },
 };
 
-const Performance = {
-  now() {
-    throw new Error(" Performance.now() not implemented")
-  }
-};
-
 /**
  * The prompt function prompts the user for input.
  * 

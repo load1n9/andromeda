@@ -43,3 +43,8 @@ declare function internal_sleep(duration: number): Promise<void>;
  */
 declare function internal_print(message: string): void;
 
+
+/**
+ * The `internal_now` function returns the current time in milliseconds.
+ */
+declare function internal_now(): number;

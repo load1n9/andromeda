@@ -1,19 +1,21 @@
 use andromeda_core::{Extension, HostData};
 use nova_vm::ecmascript::execution::agent::{GcAgent, RealmRoot};
 
-use crate::{ConsoleExt, FsExt, RuntimeMacroTask, TimeExt};
+use crate::{ConsoleExt, FsExt, PerformanceExt, RuntimeMacroTask, TimeExt};
 
 pub fn recommended_extensions() -> Vec<Extension> {
     vec![
         FsExt::new_extension(),
         ConsoleExt::new_extension(),
         TimeExt::new_extension(),
+        PerformanceExt::new_extension(),
     ]
 }
 
 pub fn recommended_builtins() -> Vec<&'static str> {
     vec![
         include_str!("../../namespace/console.ts"),
+        include_str!("../../namespace/performance.ts"),
         include_str!("../../namespace/mod.ts"),
     ]
 }
